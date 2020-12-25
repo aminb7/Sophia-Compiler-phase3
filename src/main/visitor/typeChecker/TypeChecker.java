@@ -12,9 +12,16 @@ import main.ast.nodes.statement.loop.ContinueStmt;
 import main.ast.nodes.statement.loop.ForStmt;
 import main.ast.nodes.statement.loop.ForeachStmt;
 import main.symbolTable.utils.graph.Graph;
+
 import main.visitor.Visitor;
 import main.ast.types.Type;
+import main.ast.types.list.ListType;
+import main.ast.types.list.ListNameType;
+
 import main.compileErrorException.typeErrors.UnsupportedTypeForPrint;
+import main.compileErrorException.typeErrors.ConditionNotBool;
+import main.compileErrorException.typeErrors.CannotHaveEmptyList;
+import main.compileErrorException.typeErrors.DuplicateListId;
 
 import java.util.ArrayList;
 
@@ -51,6 +58,13 @@ public class TypeChecker extends Visitor<Void> {
 
     @Override
     public Void visit(ConstructorDeclaration constructorDeclaration) {
+
+        for(VarDeclaration varDeclaration : constructorDeclaration.getArgs()) {
+            varDeclaration.accept(this);
+        }
+        for(VarDeclaration varDeclaration : constructorDeclaration.getLocalVars()) {
+            varDeclaration.accept(this);
+        }
         ArrayList<Statement> body = constructorDeclaration.getBody();
         for (Statement s : body)
             s.accept(this);
@@ -59,6 +73,12 @@ public class TypeChecker extends Visitor<Void> {
 
     @Override
     public Void visit(MethodDeclaration methodDeclaration) {
+        for(VarDeclaration varDeclaration : methodDeclaration.getArgs()) {
+            varDeclaration.accept(this);
+        }
+        for(VarDeclaration varDeclaration : methodDeclaration.getLocalVars()) {
+            varDeclaration.accept(this);
+        }
         ArrayList<Statement> body = methodDeclaration.getBody();
         for (Statement s : body)
             s.accept(this);
@@ -73,7 +93,28 @@ public class TypeChecker extends Visitor<Void> {
 
     @Override
     public Void visit(VarDeclaration varDeclaration) {
-        varDeclaration.getVarName().accept(this.expressionTypeChecker);
+        Type type = varDeclaration.getVarName().accept(this.expressionTypeChecker);
+
+        if (varDeclaration.getType().toString().equals("ListType")){
+            ListType list_type = (ListType) varDeclaration.getType();
+            if (list_type.getElementsTypes().size() == 0){
+                CannotHaveEmptyList exception = new CannotHaveEmptyList(varDeclaration.getLine());
+                varDeclaration.addError(exception);
+            }
+            boolean has_duplicate_name = false;
+            for (ListNameType list_name1 : list_type.getElementsTypes()){
+                for (ListNameType list_name2 : list_type.getElementsTypes()){
+                    if (list_name1.getName().getName().equals(list_name2.getName().getName())){
+                        DuplicateListId exception = new DuplicateListId(varDeclaration.getLine());
+                        varDeclaration.addError(exception);
+                        has_duplicate_name = true;
+                        break;
+                    }
+                }
+                if (has_duplicate_name) break;
+            }
+        }
+
         return null;
     }
 
@@ -94,7 +135,12 @@ public class TypeChecker extends Visitor<Void> {
 
     @Override
     public Void visit(ConditionalStmt conditionalStmt) {
-        conditionalStmt.getCondition().accept(this.expressionTypeChecker);
+        Type type1 = conditionalStmt.getCondition().accept(this.expressionTypeChecker);
+        if (!type1.toString().equals("BoolType")){
+            ConditionNotBool exception = new ConditionNotBool(conditionalStmt.getLine());
+            conditionalStmt.addError(exception);
+        }
+
         conditionalStmt.getThenBody().accept(this);
         if (conditionalStmt.getElseBody() != null)
             conditionalStmt.getElseBody().accept(this);
@@ -147,7 +193,12 @@ public class TypeChecker extends Visitor<Void> {
     @Override
     public Void visit(ForStmt forStmt) {
         forStmt.getInitialize().accept(this);
-        forStmt.getCondition().accept(this.expressionTypeChecker);
+        Type type1 = forStmt.getCondition().accept(this.expressionTypeChecker);
+        if (!type1.toString().equals("BoolType")){
+            ConditionNotBool exception = new ConditionNotBool(forStmt.getLine());
+            forStmt.addError(exception);
+        }
+
         forStmt.getUpdate().accept(this);
         forStmt.getBody().accept(this);
         return null;

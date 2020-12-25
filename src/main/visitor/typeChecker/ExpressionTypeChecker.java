@@ -21,8 +21,12 @@ public class ExpressionTypeChecker extends Visitor<Type> {
 
     @Override
     public Type visit(BinaryExpression binaryExpression) {
-        binaryExpression.getFirstOperand().accept(this);
-        binaryExpression.getSecondOperand().accept(this);
+//        Type type1 = binaryExpression.getFirstOperand().accept(this);
+//        Type type2 = binaryExpression.getSecondOperand().accept(this);
+//
+//        if (!type1.toString().equals("IntType") || !type2.toString().equals("IntType")){
+//
+//        }
         return null;
     }
 
