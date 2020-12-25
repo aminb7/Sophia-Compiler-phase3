@@ -10,6 +10,7 @@ import main.ast.types.Type;
 import main.symbolTable.utils.graph.Graph;
 import main.visitor.Visitor;
 
+import java.util.ArrayList;
 
 public class ExpressionTypeChecker extends Visitor<Type> {
     private final Graph<String> classHierarchy;
@@ -20,19 +21,21 @@ public class ExpressionTypeChecker extends Visitor<Type> {
 
     @Override
     public Type visit(BinaryExpression binaryExpression) {
-        //TODO
+        binaryExpression.getFirstOperand().accept(this);
+        binaryExpression.getSecondOperand().accept(this);
         return null;
     }
 
     @Override
     public Type visit(UnaryExpression unaryExpression) {
-        //TODO
+        unaryExpression.getOperand().accept(this);
         return null;
     }
 
     @Override
     public Type visit(ObjectOrListMemberAccess objectOrListMemberAccess) {
-        //TODO
+        objectOrListMemberAccess.getInstance().accept(this);
+        objectOrListMemberAccess.getMemberName().accept(this);
         return null;
     }
 
@@ -44,19 +47,25 @@ public class ExpressionTypeChecker extends Visitor<Type> {
 
     @Override
     public Type visit(ListAccessByIndex listAccessByIndex) {
-        //TODO
+        listAccessByIndex.getInstance().accept(this);
+        listAccessByIndex.getIndex().accept(this);
         return null;
     }
 
     @Override
     public Type visit(MethodCall methodCall) {
-        //TODO
+        ArrayList<Expression> args = methodCall.getArgs();
+        methodCall.getInstance().accept(this);
+        for (Expression arg : args)
+            arg.accept(this);
         return null;
     }
 
     @Override
     public Type visit(NewClassInstance newClassInstance) {
-        //TODO
+        ArrayList<Expression> args = newClassInstance.getArgs();
+        for (Expression arg : args)
+            arg.accept(this);
         return null;
     }
 
@@ -68,7 +77,9 @@ public class ExpressionTypeChecker extends Visitor<Type> {
 
     @Override
     public Type visit(ListValue listValue) {
-        //TODO
+        ArrayList<Expression>  elements = listValue.getElements();
+        for (Expression element : elements)
+            element.accept(this);
         return null;
     }
 

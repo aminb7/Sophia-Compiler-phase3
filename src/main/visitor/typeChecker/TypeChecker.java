@@ -13,6 +13,10 @@ import main.ast.nodes.statement.loop.ForStmt;
 import main.ast.nodes.statement.loop.ForeachStmt;
 import main.symbolTable.utils.graph.Graph;
 import main.visitor.Visitor;
+import main.ast.types.Type;
+import main.compileErrorException.typeErrors.UnsupportedTypeForPrint;
+
+import java.util.ArrayList;
 
 public class TypeChecker extends Visitor<Void> {
     private final Graph<String> classHierarchy;
@@ -25,73 +29,98 @@ public class TypeChecker extends Visitor<Void> {
 
     @Override
     public Void visit(Program program) {
-        //TODO
+        for(ClassDeclaration classDeclaration : program.getClasses()) {
+            classDeclaration.accept(this);
+        }
         return null;
     }
 
     @Override
     public Void visit(ClassDeclaration classDeclaration) {
-        //TODO
+        for(FieldDeclaration fieldDeclaration : classDeclaration.getFields()) {
+            fieldDeclaration.accept(this);
+        }
+        if(classDeclaration.getConstructor() != null) {
+            classDeclaration.getConstructor().accept(this);
+        }
+        for(MethodDeclaration methodDeclaration : classDeclaration.getMethods()) {
+            methodDeclaration.accept(this);
+        }
         return null;
     }
 
     @Override
     public Void visit(ConstructorDeclaration constructorDeclaration) {
-        //TODO
+        ArrayList<Statement> body = constructorDeclaration.getBody();
+        for (Statement s : body)
+            s.accept(this);
         return null;
     }
 
     @Override
     public Void visit(MethodDeclaration methodDeclaration) {
-        //TODO
+        ArrayList<Statement> body = methodDeclaration.getBody();
+        for (Statement s : body)
+            s.accept(this);
         return null;
     }
 
     @Override
     public Void visit(FieldDeclaration fieldDeclaration) {
-        //TODO
+        fieldDeclaration.getVarDeclaration().accept(this);
         return null;
     }
 
     @Override
     public Void visit(VarDeclaration varDeclaration) {
-        //TODO
+        varDeclaration.getVarName().accept(this.expressionTypeChecker);
         return null;
     }
 
     @Override
     public Void visit(AssignmentStmt assignmentStmt) {
-        //TODO
+        assignmentStmt.getlValue().accept(this.expressionTypeChecker);
+        assignmentStmt.getrValue().accept(this.expressionTypeChecker);
         return null;
     }
 
     @Override
     public Void visit(BlockStmt blockStmt) {
-        //TODO
+        ArrayList<Statement> block = blockStmt.getStatements();
+        for (Statement s : block)
+            s.accept(this);
         return null;
     }
 
     @Override
     public Void visit(ConditionalStmt conditionalStmt) {
-        //TODO
+        conditionalStmt.getCondition().accept(this.expressionTypeChecker);
+        conditionalStmt.getThenBody().accept(this);
+        if (conditionalStmt.getElseBody() != null)
+            conditionalStmt.getElseBody().accept(this);
         return null;
     }
 
     @Override
     public Void visit(MethodCallStmt methodCallStmt) {
-        //TODO
+        methodCallStmt.getMethodCall().accept(this.expressionTypeChecker);
         return null;
     }
 
     @Override
     public Void visit(PrintStmt print) {
-        //TODO
+        Type type = print.getArg().accept(this.expressionTypeChecker);
+
+        if (!((type.toString().equals("BoolType")) || (type.toString().equals("IntType")) || (type.toString().equals("StringType")))) {
+            UnsupportedTypeForPrint exception = new UnsupportedTypeForPrint(print.getLine());
+            print.addError(exception);
+        }
         return null;
     }
 
     @Override
     public Void visit(ReturnStmt returnStmt) {
-        //TODO
+        returnStmt.getReturnedExpr().accept(this.expressionTypeChecker);
         return null;
     }
 
@@ -109,13 +138,18 @@ public class TypeChecker extends Visitor<Void> {
 
     @Override
     public Void visit(ForeachStmt foreachStmt) {
-        //TODO
+        foreachStmt.getVariable().accept(this.expressionTypeChecker);
+        foreachStmt.getList().accept(this.expressionTypeChecker);
+        foreachStmt.getBody().accept(this);
         return null;
     }
 
     @Override
     public Void visit(ForStmt forStmt) {
-        //TODO
+        forStmt.getInitialize().accept(this);
+        forStmt.getCondition().accept(this.expressionTypeChecker);
+        forStmt.getUpdate().accept(this);
+        forStmt.getBody().accept(this);
         return null;
     }
 
