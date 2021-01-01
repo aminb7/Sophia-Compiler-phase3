@@ -1,6 +1,7 @@
 package main;
 
 import main.ast.nodes.Program;
+import main.ast.nodes.expression.operators.BinaryOperator;
 import main.visitor.nameAnalyzer.NameAnalyzer;
 import main.visitor.typeChecker.TypeChecker;
 import main.visitor.utils.ErrorReporter;
@@ -25,12 +26,12 @@ public class SophiaCompiler {
             System.exit(1);
 
         TypeChecker typeChecker = new TypeChecker(nameAnalyzer.getClassHierarchy());
+
         program.accept(typeChecker);
         numberOfErrors = program.accept(errorReporter);
         if(numberOfErrors > 0)
             System.exit(1);
 
         System.out.println("Compilation successful");
-
     }
 }
