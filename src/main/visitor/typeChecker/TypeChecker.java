@@ -69,8 +69,8 @@ public class TypeChecker extends Visitor<Void> {
 
         if (first instanceof ClassType){
             if (second instanceof ClassType){
-                return classHierarchy.isSecondNodeAncestorOf(first.toString(), second.toString()) ||
-                        ((ClassType) first).getClassName().getName().equals(((ClassType) second).getClassName().getName());
+                return (classHierarchy.isSecondNodeAncestorOf(((ClassType) first).getClassName().getName(), ((ClassType) second).getClassName().getName()) ||
+                        ((ClassType) first).getClassName().getName().equals(((ClassType) second).getClassName().getName()));
             }
         }
 
@@ -100,7 +100,7 @@ public class TypeChecker extends Visitor<Void> {
         }
 
         if (first instanceof NullType){
-            if (second instanceof NullType){
+            if (second instanceof NullType || second instanceof ClassType || second instanceof FptrType){
                 return true;
             }
         }
@@ -108,12 +108,16 @@ public class TypeChecker extends Visitor<Void> {
         return false;
     }
 
-    void getDeclarationTypeErrors(Type type, VarDeclaration varDeclaration){
+    boolean getDeclarationTypeErrors(Type type, VarDeclaration varDeclaration){
+        boolean noType = false;
+
         if (type instanceof ListType){
+
             ListType list_type = (ListType) type;
             if (list_type.getElementsTypes().size() == 0){
                 CannotHaveEmptyList exception = new CannotHaveEmptyList(varDeclaration.getLine());
                 varDeclaration.addError(exception);
+                noType = true;
             }
             boolean has_duplicate_name = false;
             ArrayList<ListNameType> elementTypes = list_type.getElementsTypes();
@@ -125,14 +129,19 @@ public class TypeChecker extends Visitor<Void> {
                         DuplicateListId exception = new DuplicateListId(varDeclaration.getLine());
                         varDeclaration.addError(exception);
                         has_duplicate_name = true;
+                        noType = true;
                         break;
                     }
                 }
                 if (has_duplicate_name) break;
             }
 
-            for (int i = 0; i < elementTypes.size(); i++)
-                getDeclarationTypeErrors(elementTypes.get(i).getType(), varDeclaration);
+            boolean childNotype = false;
+            for (int i = 0; i < elementTypes.size(); i++) {
+                childNotype = getDeclarationTypeErrors(elementTypes.get(i).getType(), varDeclaration) || childNotype;
+            }
+
+            noType = childNotype || noType;
 
         }
 
@@ -144,16 +153,21 @@ public class TypeChecker extends Visitor<Void> {
             catch (ItemNotFoundException e){
                 ClassNotDeclared exception = new ClassNotDeclared(varDeclaration.getLine(), ((ClassType) type).getClassName().getName());
                 varDeclaration.addError(exception);
+                noType = true;
             }
         }
 
         if (type instanceof FptrType){
             ArrayList<Type> args = ((FptrType) type).getArgumentsTypes();
+            boolean childNotype = false;
             for (Type argType : args){
-                getDeclarationTypeErrors(argType, varDeclaration);
+                childNotype = getDeclarationTypeErrors(argType, varDeclaration) || childNotype;
             }
-            getDeclarationTypeErrors(((FptrType) type).getReturnType(), varDeclaration);
+            childNotype = getDeclarationTypeErrors(((FptrType) type).getReturnType(), varDeclaration) || childNotype;
+            noType = childNotype || noType;
         }
+
+        return noType;
     }
 
     @Override
@@ -174,6 +188,14 @@ public class TypeChecker extends Visitor<Void> {
                 if (classDeclaration.getParentClassName() != null){
                     MainClassCantExtend exception = new MainClassCantExtend(classDeclaration.getParentClassName().getLine());
                     program.addError(exception);
+                    try {
+                        String classKey = "Class_" + classDeclaration.getParentClassName().getName();
+                        ClassSymbolTableItem classSymbolTableItem = (ClassSymbolTableItem) SymbolTable.root.getItem(classKey, true);
+                    }
+                    catch (ItemNotFoundException e){
+                        ClassNotDeclared notDeclared = new ClassNotDeclared(classDeclaration.getParentClassName().getLine(), classDeclaration.getParentClassName().getName());
+                        classDeclaration.addError(notDeclared);
+                    }
                 }
                 hasMain = true;
             }
@@ -183,15 +205,13 @@ public class TypeChecker extends Visitor<Void> {
                         CannotExtendFromMainClass exception = new CannotExtendFromMainClass(classDeclaration.getParentClassName().getLine());
                         program.addError(exception);
                     }
-                    else{
-                        try {
-                            String classKey = "Class_" + classDeclaration.getParentClassName().getName();
-                            ClassSymbolTableItem classSymbolTableItem = (ClassSymbolTableItem) SymbolTable.root.getItem(classKey, true);
-                        }
-                        catch (ItemNotFoundException e){
-                            ClassNotDeclared exception = new ClassNotDeclared(classDeclaration.getParentClassName().getLine(), classDeclaration.getParentClassName().getName());
-                            classDeclaration.addError(exception);
-                        }
+                    try {
+                        String classKey = "Class_" + classDeclaration.getParentClassName().getName();
+                        ClassSymbolTableItem classSymbolTableItem = (ClassSymbolTableItem) SymbolTable.root.getItem(classKey, true);
+                    }
+                    catch (ItemNotFoundException e){
+                        ClassNotDeclared exception = new ClassNotDeclared(classDeclaration.getParentClassName().getLine(), classDeclaration.getParentClassName().getName());
+                        classDeclaration.addError(exception);
                     }
                 }
             }
@@ -279,7 +299,9 @@ public class TypeChecker extends Visitor<Void> {
 
     @Override
     public Void visit(VarDeclaration varDeclaration) {
-        getDeclarationTypeErrors(varDeclaration.getType(), varDeclaration);
+        if (getDeclarationTypeErrors(varDeclaration.getType(), varDeclaration)){
+            varDeclaration.setType(new NoType());
+        }
 
         return null;
     }
@@ -291,6 +313,8 @@ public class TypeChecker extends Visitor<Void> {
         if (!expressionTypeChecker.assignStmtIsLValue){
             LeftSideNotLvalue exception = new LeftSideNotLvalue(assignmentStmt.getlValue().getLine());
             assignmentStmt.addError(exception);
+            Type rtype = assignmentStmt.getrValue().accept(this.expressionTypeChecker);
+            return null;
         }
 
         Type rtype = assignmentStmt.getrValue().accept(this.expressionTypeChecker);
@@ -318,7 +342,7 @@ public class TypeChecker extends Visitor<Void> {
     @Override
     public Void visit(ConditionalStmt conditionalStmt) {
         Type type1 = conditionalStmt.getCondition().accept(this.expressionTypeChecker);
-        if (!(type1 instanceof BoolType)){
+        if (!(type1 instanceof BoolType) && !(type1 instanceof NoType)){
             ConditionNotBool exception = new ConditionNotBool(conditionalStmt.getLine());
             conditionalStmt.addError(exception);
         }
@@ -396,7 +420,7 @@ public class TypeChecker extends Visitor<Void> {
             for (int i = 1; i < ((ListType) type2).getElementsTypes().size(); i++){ // check later: a[3] (a is (IntType, IntType, NoType))
                 if (!(firstIsSubTypeOfSecond(firstType, ((ListType) type2).getElementsTypes().get(i).getType()) &&
                         firstIsSubTypeOfSecond(((ListType) type2).getElementsTypes().get(i).getType(), firstType)) &&
-                        (((ListType) type2).getElementsTypes().get(i).getType() instanceof NoType))
+                        !(((ListType) type2).getElementsTypes().get(i).getType() instanceof NoType))
                     sameElements = false;
             }
             if (!sameElements){
@@ -404,7 +428,7 @@ public class TypeChecker extends Visitor<Void> {
                 foreachStmt.addError(exception);
             }
 
-            if (!firstIsSubTypeOfSecond(firstType, type1)){
+            if (!firstIsSubTypeOfSecond(firstType, type1) || !firstIsSubTypeOfSecond(type1, firstType)){
                 ForeachVarNotMatchList exception = new ForeachVarNotMatchList(foreachStmt);
                 foreachStmt.addError(exception);
             }

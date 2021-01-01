@@ -89,8 +89,8 @@ public class ExpressionTypeChecker extends Visitor<Type> {
 
         if (first instanceof ClassType){
             if (second instanceof ClassType){
-                return classHierarchy.isSecondNodeAncestorOf(first.toString(), second.toString()) ||
-                        ((ClassType) first).getClassName().getName().equals(((ClassType) second).getClassName().getName());
+                return (classHierarchy.isSecondNodeAncestorOf(((ClassType) first).getClassName().getName(), ((ClassType) second).getClassName().getName()) ||
+                        ((ClassType) first).getClassName().getName().equals(((ClassType) second).getClassName().getName()));
             }
         }
 
@@ -139,8 +139,14 @@ public class ExpressionTypeChecker extends Visitor<Type> {
             assignExprIsLValue = false;
             unaryIsLValue = false;
 
-            if (type1 instanceof NoType || type2 instanceof NoType){
+            if (type1 instanceof NoType && type2 instanceof NoType){
                 return new NoType();
+            }
+            if (type1 instanceof NoType && type2 instanceof BoolType){
+                return new NoType();
+            }
+            if (type1 instanceof BoolType && type2 instanceof NoType){
+                return new BoolType();
             }
             if (type1 instanceof BoolType && type2 instanceof BoolType){
                 return new BoolType();
@@ -157,7 +163,13 @@ public class ExpressionTypeChecker extends Visitor<Type> {
             assignExprIsLValue = false;
             unaryIsLValue = false;
 
-            if (type1 instanceof NoType || type2 instanceof NoType){
+            if (type1 instanceof NoType && type2 instanceof NoType){
+                return new NoType();
+            }
+            if (type1 instanceof NoType && type2 instanceof IntType){
+                return new NoType();
+            }
+            if (type1 instanceof IntType && type2 instanceof NoType){
                 return new NoType();
             }
             if (type1 instanceof IntType && type2 instanceof IntType){
@@ -172,10 +184,13 @@ public class ExpressionTypeChecker extends Visitor<Type> {
             assignExprIsLValue = true;
             Type type1 = binaryExpression.getFirstOperand().accept(this);
 
-            boolean assignExprIsLValueCopy = assignExprIsLValue;
             if (!assignExprIsLValue){
                 LeftSideNotLvalue exception = new LeftSideNotLvalue(binaryExpression.getFirstOperand().getLine());
                 binaryExpression.addError(exception);
+                binaryExpression.getSecondOperand().accept(this);
+                unaryIsLValue = false;
+                assignStmtIsLValue = false;
+                return new NoType();
             }
 
             Type type2 = binaryExpression.getSecondOperand().accept(this);
@@ -186,10 +201,7 @@ public class ExpressionTypeChecker extends Visitor<Type> {
                 return new NoType();
             }
             if (firstIsSubTypeOfSecond(type2, type1)){
-                if (assignExprIsLValueCopy)
-                    return type2;
-                else
-                    return new NoType();
+                return type2;
             }
             unaryIsLValue = false;
             assignStmtIsLValue = false;
@@ -206,7 +218,13 @@ public class ExpressionTypeChecker extends Visitor<Type> {
             assignExprIsLValue = false;
             unaryIsLValue = false;
 
-            if (type1 instanceof NoType || type2 instanceof NoType){
+            if (type1 instanceof NoType && type2 instanceof NoType){
+                return new NoType();
+            }
+            if (type1 instanceof NoType && type2 instanceof IntType){
+                return new NoType();
+            }
+            if (type1 instanceof IntType && type2 instanceof NoType){
                 return new NoType();
             }
             if (type1 instanceof IntType && type2 instanceof IntType){
@@ -324,7 +342,7 @@ public class ExpressionTypeChecker extends Visitor<Type> {
             assignStmtIsLValue = false;
             assignExprIsLValue = false;
             if (!unaryIsLValue) {
-                LeftSideNotLvalue exception = new LeftSideNotLvalue(unaryExpression.getOperand().getLine());
+                IncDecOperandNotLvalue exception = new IncDecOperandNotLvalue(unaryExpression.getOperand().getLine(), operator.toString());
                 unaryExpression.addError(exception);
             }
 
@@ -334,6 +352,8 @@ public class ExpressionTypeChecker extends Visitor<Type> {
             if ((type instanceof IntType) && unaryIsLValue){
                 return new IntType();
             }
+            if (type instanceof IntType)
+                return new NoType();
             UnsupportedOperandType exception = new UnsupportedOperandType(unaryExpression.getLine(), operator.toString());
             unaryExpression.addError(exception);
             return new NoType();
@@ -376,6 +396,9 @@ public class ExpressionTypeChecker extends Visitor<Type> {
             }catch (ItemNotFoundException e) {
                 ClassNotDeclared exception = new ClassNotDeclared(objectOrListMemberAccess.getLine(), ((ClassType) objectType).getClassName().getName());
                 objectOrListMemberAccess.addError(exception);
+                assignStmtIsLValue = false;
+                assignExprIsLValue = false;
+                unaryIsLValue = false;
                 return new NoType();
             }
         }else if (objectType instanceof ListType){
@@ -388,6 +411,10 @@ public class ExpressionTypeChecker extends Visitor<Type> {
             ListMemberNotFound exception = new ListMemberNotFound(objectOrListMemberAccess.getMemberName().getLine(), objectOrListMemberAccess.getMemberName().getName());
             objectOrListMemberAccess.addError(exception);
             return new NoType();
+        }else {
+            assignStmtIsLValue = false;
+            assignExprIsLValue = false;
+            unaryIsLValue = false;
         }
 
         MemberAccessOnNoneObjOrListType exception = new MemberAccessOnNoneObjOrListType(objectOrListMemberAccess.getLine());
@@ -425,49 +452,49 @@ public class ExpressionTypeChecker extends Visitor<Type> {
     public Type visit(ListAccessByIndex listAccessByIndex) {
         boolean hasError = false;
 
-        Type type = listAccessByIndex.getIndex().accept(this);
+        Type type1 = listAccessByIndex.getIndex().accept(this);
 
         assignStmtIsLValue = true;
         assignExprIsLValue = true;
         unaryIsLValue = true;
 
-        if (!(type instanceof IntType)){
+        if (!(type1 instanceof IntType)){
             ListIndexNotInt exception = new ListIndexNotInt(listAccessByIndex.getIndex().getLine());
             listAccessByIndex.addError(exception);
             hasError = true;
         }
 
-        if (type instanceof NoType) return new NoType(); // Check later: erroraye badi shayad az dast beran.
-
-        type = listAccessByIndex.getInstance().accept(this);
+        Type type2 = listAccessByIndex.getInstance().accept(this);
         assignStmtIsLValue = true;
         assignExprIsLValue = true;
         unaryIsLValue = true;
 
-        if (!(type instanceof ListType)){
+        if (!(type2 instanceof ListType) && !(type2 instanceof NoType)){
             ListAccessByIndexOnNoneList exception = new ListAccessByIndexOnNoneList(listAccessByIndex.getInstance().getLine());
             listAccessByIndex.addError(exception);
             hasError = true;
         }
 
-        if (type instanceof NoType) return new NoType();
+        if (type1 instanceof NoType) return new NoType(); // Check later: erroraye badi shayad az dast beran.
+        if (type2 instanceof NoType) return new NoType();
 
-        if (type instanceof ListType){
+        if (type2 instanceof ListType){
             boolean sameElements = true;
-            if (((ListType) type).getElementsTypes().size() > 0){
-                Type firstType = ((ListType) type).getElementsTypes().get(0).getType();
-                for (int i = 1; i < ((ListType) type).getElementsTypes().size(); i++){ // check later: a[3] (a is (IntType, IntType, NoType))
-                    if (!(firstIsSubTypeOfSecond(firstType, ((ListType) type).getElementsTypes().get(i).getType()) &&
-                            firstIsSubTypeOfSecond(((ListType) type).getElementsTypes().get(i).getType(), firstType)))
+            if (((ListType) type2).getElementsTypes().size() > 0){
+                Type firstType = ((ListType) type2).getElementsTypes().get(0).getType();
+                for (int i = 1; i < ((ListType) type2).getElementsTypes().size(); i++){ // check later: a[3] (a is (IntType, IntType, NoType))
+                    if (!(firstIsSubTypeOfSecond(firstType, ((ListType) type2).getElementsTypes().get(i).getType()) &&
+                            firstIsSubTypeOfSecond(((ListType) type2).getElementsTypes().get(i).getType(), firstType)) &&
+                            !(((ListType) type2).getElementsTypes().get(i).getType() instanceof NoType))
                         sameElements = false;
                 }
             }
             if (sameElements){
-                if (((ListType) type).getElementsTypes().size() > 0) {
+                if (((ListType) type2).getElementsTypes().size() > 0) {
                     if (hasError)
                         return new NoType();
                     else {
-                        return ((ListType) type).getElementsTypes().get(0).getType();
+                        return ((ListType) type2).getElementsTypes().get(0).getType();
                     }
                 }
                 else
@@ -475,7 +502,19 @@ public class ExpressionTypeChecker extends Visitor<Type> {
             }
             else{
                 if (listAccessByIndex.getIndex() instanceof IntValue){
-                    return ((ListType) type).getElementsTypes().get(((IntValue) listAccessByIndex.getIndex()).getConstant()).getType();
+                    if (((IntValue) listAccessByIndex.getIndex()).getConstant() >= ((ListType) type2).getElementsTypes().size()){
+                        if (hasError)
+                            return new NoType();
+                        else
+                            return ((ListType) type2).getElementsTypes().get(0).getType();
+                    }
+                    else{
+                        if (hasError)
+                            return new NoType();
+                        else
+                            return ((ListType) type2).getElementsTypes().get(((IntValue) listAccessByIndex.getIndex()).getConstant()).getType();
+                    }
+
                 }
                 CantUseExprAsIndexOfMultiTypeList exception = new CantUseExprAsIndexOfMultiTypeList(listAccessByIndex.getIndex().getLine());
                 listAccessByIndex.addError(exception);
@@ -493,6 +532,13 @@ public class ExpressionTypeChecker extends Visitor<Type> {
         assignExprIsLValue = false;
         unaryIsLValue = false;
         if (type instanceof NoType){
+            ArrayList<Expression> args = methodCall.getArgs();
+            for (int i = 0; i < args.size(); i++) {
+                args.get(i).accept(this);
+            }
+            assignStmtIsLValue = false;
+            assignExprIsLValue = false;
+            unaryIsLValue = false;
             return new NoType();
         }
         if (!(type instanceof FptrType)){
@@ -501,14 +547,15 @@ public class ExpressionTypeChecker extends Visitor<Type> {
             return new NoType();
         }
 
+        boolean hasError = false;
         if ((((FptrType) type).getReturnType() instanceof NullType) && !inMethodCallStmt){
             CantUseValueOfVoidMethod exception = new CantUseValueOfVoidMethod(methodCall.getLine());
             methodCall.addError(exception);
+            hasError = true;
         }
 
         ArrayList<Expression> args = methodCall.getArgs();
 
-        boolean hasError = false;
         if (args.size() != ((FptrType) type).getArgumentsTypes().size()){
             MethodCallNotMatchDefinition exception = new MethodCallNotMatchDefinition(methodCall.getLine());
             methodCall.addError(exception);
@@ -547,6 +594,13 @@ public class ExpressionTypeChecker extends Visitor<Type> {
             ClassNotDeclared exception = new ClassNotDeclared(newClassInstance.getLine(), newClassInstance.getClassType().getClassName().getName());
             newClassInstance.addError(exception);
 
+            ArrayList<Expression> args = newClassInstance.getArgs();
+            for (int i = 0; i < args.size(); i++) {
+                Type argType = args.get(i).accept(this);
+            }
+            assignStmtIsLValue = false;
+            assignExprIsLValue = false;
+            unaryIsLValue = false;
             return new NoType();
         }
 
